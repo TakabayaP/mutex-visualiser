@@ -23,8 +23,7 @@ type MutexVisualiser[T any] struct {
 
 type action struct {
 	actionType  actionType
-	start       time.Time
-	end         time.Time
+	actionTime  time.Time
 	gID         uint64
 	parentGID   uint64
 	funcName    string
@@ -33,46 +32,52 @@ type action struct {
 type actionType int
 
 const (
-	lock actionType = iota
+	lockStart actionType = iota
+	lockEnd
 	unlock
 	set
 	read
 )
 
 func (a actionType) String() string {
-	return []string{"lock", "unlock", "set", "read"}[a]
+	return []string{"lock_start", "lock_end", "unlock", "set", "read"}[a]
+}
+
+func (m *MutexVisualiser[T]) PrintAll() {
+	for _, act := range m.actions {
+		fmt.Printf("Action: %s\nAction Time: %s\nGoroutine ID: %d\nParent Goroutine ID: %d\nFunction name: %s\nParent function name: %s\n\n", act.actionType.String(), act.actionTime.Format(timeFormat), act.gID, act.parentGID, act.funcName, act.gParentFunc)
+	}
 }
 
 func (m *MutexVisualiser[T]) Lock() {
 	start := time.Now()
+	m.addAction(action{actionType: lockStart,
+		actionTime: start})
 	m.m.Lock()
 	end := time.Now()
-	m.addAction(action{actionType: lock,
-		start: start,
-		end:   end})
+	m.addAction(action{actionType: lockEnd,
+		actionTime: end,
+	})
 }
 
 func (m *MutexVisualiser[T]) Unlock() {
 	start := time.Now()
 	m.m.Unlock()
-	end := time.Now()
 	m.addAction(action{actionType: unlock,
-		start: start,
-		end:   end})
+		actionTime: start,
+	})
 }
 
 func (m *MutexVisualiser[T]) Read() T {
 	m.addAction(action{actionType: read,
-		start: time.Now(),
-		end:   time.Now(),
+		actionTime: time.Now(),
 	})
 	return m.value
 }
 
 func (m *MutexVisualiser[T]) Set(t T) {
 	m.addAction(action{actionType: set,
-		start: time.Now(),
-		end:   time.Now(),
+		actionTime: time.Now(),
 	})
 	m.value = t
 }
@@ -88,16 +93,7 @@ func (m *MutexVisualiser[T]) addAction(act action) {
 	act.funcName = runtime.FuncForPC(pc).Name()
 	act.gParentFunc = getGParentFunc(b)
 	m.actions = append(m.actions, act)
-
-	fmt.Printf("Action: %s\n", act.actionType.String())
-	fmt.Printf("Action start: %s\n", act.start.Format(timeFormat))
-	fmt.Printf("Action end: %s\n", act.end.Format(timeFormat))
-	fmt.Printf("Action duration: %v\n", act.end.Sub(act.start))
-	fmt.Printf("Goroutine ID: %d\n", act.gID)
-	fmt.Printf("Parent Goroutine ID: %d\n", act.parentGID)
-	fmt.Printf("Function name: %s\n", act.funcName)
-	fmt.Printf("Parent function name: %s\n", act.gParentFunc)
-	fmt.Println()
+	fmt.Printf("Action: %s\nAction Time: %s\nGoroutine ID: %d\nParent Goroutine ID: %d\nFunction name: %s\nParent function name: %s\n\n", act.actionType.String(), act.actionTime.Format(timeFormat), act.gID, act.parentGID, act.funcName, act.gParentFunc)
 }
 func getGID(stack []byte) uint64 {
 	b := bytes.TrimPrefix(stack, []byte("goroutine "))
