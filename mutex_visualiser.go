@@ -57,9 +57,9 @@ func (m *MutexVisualiser[T]) PrintAll() {
 
 func (m *MutexVisualiser[T]) Lock() {
 	start := time.Now()
+	m.m.Lock()
 	m.addAction(action{actionType: lockStart,
 		actionTime: start})
-	m.m.Lock()
 	end := time.Now()
 	m.addAction(action{actionType: lockEnd,
 		actionTime: end,
@@ -108,6 +108,12 @@ func (m *MutexVisualiser[T]) RenderGraph(path string) {
 
 	tNo := 1
 	mNo := 1
+	var fT time.Time
+	if len(m.actions) > 0 {
+		fT = m.actions[0].actionTime
+	} else {
+		panic("no action")
+	}
 	for _, v := range m.actions {
 		if _, ok := GNos[v.gID]; !ok {
 			GNos[v.gID] = []action{v}
@@ -115,18 +121,18 @@ func (m *MutexVisualiser[T]) RenderGraph(path string) {
 		}
 		switch v.actionType {
 		case lockStart:
-			graphStr += actionOnG("", v.gID, len(GNos[v.gID]), tNo, defaultColor)
+			graphStr += actionOnG("", v.actionTime.Sub(fT).String(), v.gID, len(GNos[v.gID]), tNo, defaultColor)
 		case read:
-			graphStr += actionToM("read", "back", v.gID, len(GNos[v.gID]), tNo, mNo)
+			graphStr += actionToM("read", v.actionTime.Sub(fT).String(), "back", v.gID, len(GNos[v.gID]), tNo, mNo)
 			mNo++
 		case unlock:
-			graphStr += actionToM("unlock", "back", v.gID, len(GNos[v.gID]), tNo, mNo)
+			graphStr += actionToM("unlock", v.actionTime.Sub(fT).String(), "back", v.gID, len(GNos[v.gID]), tNo, mNo)
 			mNo++
 		case lockEnd:
-			graphStr += actionLockM(v.gID, len(GNos[v.gID]), tNo, mNo, "#FF9205", v.actionTime.Sub(GNos[v.gID][len(GNos[v.gID])-1].actionTime))
+			graphStr += actionLockM(v.actionTime.Sub(fT).String(), v.gID, len(GNos[v.gID]), tNo, mNo, "#FF9205", v.actionTime.Sub(GNos[v.gID][len(GNos[v.gID])-1].actionTime))
 			mNo++
 		default:
-			graphStr += actionToM(v.actionType.String(), "forward", v.gID, len(GNos[v.gID]), tNo, mNo)
+			graphStr += actionToM(v.actionType.String(), v.actionTime.Sub(fT).String(), "forward", v.gID, len(GNos[v.gID]), tNo, mNo)
 			mNo++
 		}
 		tNo++
@@ -149,13 +155,20 @@ func (m *MutexVisualiser[T]) RenderGraph(path string) {
 	}
 	defer f.Close()
 
+	// t.Execute(f, graphStr)
 	if err := g.Render(graph, "dot", f); err != nil {
 		log.Fatal(err)
 	}
 
-	if err := g.RenderFilename(graph, graphviz.SVG, path+"svg"); err != nil {
+	if err := g.RenderFilename(graph, graphviz.SVG, path+".svg"); err != nil {
 		log.Fatal(err)
 	}
+
+	if err := g.RenderFilename(graph, graphviz.PNG, path+".png"); err != nil {
+		log.Fatal(err)
+	}
+	g.Close()
+
 }
 
 func createGBranch(GID uint64, PGID uint64) string {
@@ -171,12 +184,13 @@ func createGBranch(GID uint64, PGID uint64) string {
 	return tmp.String()
 }
 
-func actionToM(ActionType string, ActionDir string, GID uint64, GNo int, TNo int, MNo int) string {
+func actionToM(ActionType string, ActionTime string, ActionDir string, GID uint64, GNo int, TNo int, MNo int) string {
 	t := template.New("set")
 	t.Parse(tmplActionToMutex)
 	var tmp bytes.Buffer
 	if err := t.Execute(&tmp, map[string]string{
 		"ActionType": ActionType,
+		"ActionTime": ActionTime,
 		"ActionDir":  ActionDir,
 		"GID":        fmt.Sprint(GID),
 		"GNo":        strconv.Itoa(GNo),
@@ -190,32 +204,34 @@ func actionToM(ActionType string, ActionDir string, GID uint64, GNo int, TNo int
 	}
 	return tmp.String()
 }
-func actionLockM(GID uint64, GNo int, TNo int, MNo int, EdgeColor string, Duration time.Duration) string {
+func actionLockM(ActionTime string, GID uint64, GNo int, TNo int, MNo int, EdgeColor string, Duration time.Duration) string {
 	t := template.New("set")
 	t.Parse(tmplLockMutex)
 	var tmp bytes.Buffer
 	if err := t.Execute(&tmp, map[string]string{
-		"GID":       fmt.Sprint(GID),
-		"GNo":       strconv.Itoa(GNo),
-		"NextGNo":   strconv.Itoa(GNo + 1),
-		"TNo":       strconv.Itoa(TNo),
-		"NextTNo":   strconv.Itoa(TNo + 1),
-		"MNo":       strconv.Itoa(MNo),
-		"NextMNo":   strconv.Itoa(MNo + 1),
-		"EdgeColor": EdgeColor,
-		"Duration":  Duration.String(),
+		"ActionTime": ActionTime,
+		"GID":        fmt.Sprint(GID),
+		"GNo":        strconv.Itoa(GNo),
+		"NextGNo":    strconv.Itoa(GNo + 1),
+		"TNo":        strconv.Itoa(TNo),
+		"NextTNo":    strconv.Itoa(TNo + 1),
+		"MNo":        strconv.Itoa(MNo),
+		"NextMNo":    strconv.Itoa(MNo + 1),
+		"EdgeColor":  EdgeColor,
+		"Duration":   Duration.String(),
 	}); err != nil {
 		log.Fatal(err)
 	}
 	return tmp.String()
 }
 
-func actionOnG(ActionType string, GID uint64, GNo int, TNo int, EdgeColor string) string {
+func actionOnG(ActionType string, ActionTime string, GID uint64, GNo int, TNo int, EdgeColor string) string {
 	t := template.New("on")
 	t.Parse(tmplActionOnG)
 	var tmp bytes.Buffer
 	if err := t.Execute(&tmp, map[string]string{
 		"ActionType": ActionType,
+		"ActionTime": ActionTime,
 		"GID":        fmt.Sprint(GID),
 		"GNo":        strconv.Itoa(GNo),
 		"NextGNo":    strconv.Itoa(GNo + 1),

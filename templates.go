@@ -45,7 +45,7 @@ g{{.PGID}}_1->g{{.GID}}_1;
 `
 
 const tmplActionToMutex = `
-t{{.NextTNo}}[group="time"];
+t{{.NextTNo}}[shape="plaintext" group="time" label="{{.ActionTime}}"];
 t{{.TNo}}->t{{.NextTNo}};
 g{{.GID}}_{{.NextGNo}}[group="g{{.GID}}"];
 g{{.GID}}_{{.GNo}}->g{{.GID}}_{{.NextGNo}};
@@ -60,7 +60,7 @@ subgraph{
 g{{.GID}}_{{.NextGNo}}->m{{.NextMNo}}[label="{{.ActionType}}" dir="{{.ActionDir}}"];
 `
 const tmplLockMutex = `
-t{{.NextTNo}}[group="time"];
+t{{.NextTNo}}[shape="plaintext" group="time" label="{{.ActionTime}}"];
 t{{.TNo}}->t{{.NextTNo}};
 g{{.GID}}_{{.NextGNo}}[group="g{{.GID}}"];
 g{{.GID}}_{{.GNo}}->g{{.GID}}_{{.NextGNo}}[label="waiting for lock...{{.Duration}}" color="{{.EdgeColor}}" dir="forward"];
@@ -75,7 +75,7 @@ subgraph{
 g{{.GID}}_{{.NextGNo}}->m{{.NextMNo}}[label="lock" dir="forward"];
 `
 const tmplActionOnG = `
-t{{.NextTNo}}[group="time"];
+t{{.NextTNo}}[shape="plaintext" group="time" label="{{.ActionTime}}"];
 t{{.TNo}}->t{{.NextTNo}};
 g{{.GID}}_{{.NextGNo}}[group="g{{.GID}}"];
 g{{.GID}}_{{.GNo}}->g{{.GID}}_{{.NextGNo}}[label="{{.ActionType}}" color="{{.EdgeColor}}"];	
